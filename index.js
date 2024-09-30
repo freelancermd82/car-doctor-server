@@ -1,13 +1,19 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config()
+const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
 
 // middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+    origin: ['http://localhost:5173'], 
+    credentials: true
+}));
+app.use(express.json()); 
+app.use(cookieParser());
 
 
 
@@ -15,7 +21,6 @@ app.use(express.json());
 
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.bd0dd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
-console.log(uri);
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -34,7 +39,22 @@ async function run() {
         const carCollection = client.db('coffeeDB').collection('coffee');
         const bookingCollection = client.db('coffeeDB').collection('coffee2');
 
+        //auth related api
+        app.post('/jwt', async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            
+            res
+            .cookie('token', token, {
+                httpOnly: true, 
+                secure: false,
+                sameSite: 'none'
+            })
+            .send({success: true});
+        })
 
+        //services related api
         app.get('/services', async (req, res) => {
             const cursor = carCollection.find();
             const result = await cursor.toArray();
@@ -58,6 +78,7 @@ async function run() {
 
         app.get('/bookings', async (req, res) => {
             console.log(req.query.email);
+            console.log('tok tok token', req.cookies.token);
             let query = {};
             if (req.query?.email) {
                 query = { email: req.query.email }
