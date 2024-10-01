@@ -9,10 +9,10 @@ const port = process.env.PORT || 5000;
 
 // middleware
 app.use(cors({
-    origin: ['http://localhost:5173'], 
+    origin: ['http://localhost:5173'],
     credentials: true
 }));
-app.use(express.json()); 
+app.use(express.json());
 app.use(cookieParser());
 
 
@@ -31,6 +31,34 @@ const client = new MongoClient(uri, {
     }
 });
 
+//middleware
+const logger = async (req, res, next) => {
+    console.log('called:', req.host, req.originalUrl);
+    next();
+}
+
+const verifyToken = async (req, res, next) => {
+    const token = req.headers?.authorization?.split(" ")[1];
+    console.log(token);
+    if (!token) {
+        return res.status(401).send({ message: 'not authorized' })
+    }
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        // error
+        if (err) {
+            console.log(err);
+            return res.status(401).send({ message: 'unauthorized' });
+        }
+
+        // if token is valid then it would be decoded 
+        console.log('value in the token', decoded);
+        req.user = decoded;
+        next();
+    })
+
+
+}
+
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
@@ -44,14 +72,15 @@ async function run() {
             const user = req.body;
             console.log(user);
             const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
-            
-            res
-            .cookie('token', token, {
-                httpOnly: true, 
-                secure: false,
-                sameSite: 'none'
-            })
-            .send({success: true});
+
+            // res
+            //     .cookie('token', token, {
+            //         httpOnly: true,
+            //         secure: false,
+            //         sameSite: 'none'
+            //     })
+            //     .send({ success: true });
+            res.status(200).json({ token: token })
         })
 
         //services related api
@@ -76,9 +105,15 @@ async function run() {
 
         // bookings
 
-        app.get('/bookings', async (req, res) => {
+        app.get('/bookings', verifyToken, async (req, res) => {
             console.log(req.query.email);
-            console.log('tok tok token', req.cookies.token);
+            // console.log('tok tok token', req.cookies.token);
+            console.log('user in the valid token', req.user);
+            if(req.query.email !== req.user.email) {
+                return res.status(403).send({message: 'forbidden access'});
+            }
+
+
             let query = {};
             if (req.query?.email) {
                 query = { email: req.query.email }
